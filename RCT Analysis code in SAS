@@ -1,0 +1,295 @@
+/* STEP 1: Importing Our CSV file */
+proc import datafile="/home/u63681137/RCT.csv" 
+	out=work.RCT 
+	dbms=csv 
+	replace;
+run;
+
+/* STEP 2: Display first 10 rows */
+proc print data=work.RCT (obs=10);
+	var Patient_Code Intervention Base_SBP Base_DBP SBP DBP;
+run;
+
+
+/* STEP 3: Describe structures and variables in dataset */
+proc contents data=work.RCT;
+run;
+
+
+/* STEP 4. Check for missing values */
+proc means data=work.RCT n nmiss;
+run;
+
+/* STEP 5: Calculate Summary Statistics */
+proc means data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age  SBP_diff DBP_diff ;
+run;
+
+/* STEP 6: Examine Extreme Values */
+proc univariate data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age  SBP_diff SBP_diff DBP_diff;
+run;
+
+/* STEP 7: Examine Unique Values and Frequency */
+proc freq data=work.RCT;
+    tables Gender Intervention;
+run;
+
+/* STEP 8: Calculate summary statistics for each intervention */
+/* Intervention = Placebo */
+
+/* Calculate Summary Statistics */
+proc means data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age  SBP DBP;
+	where Intervention = 'Placebo';
+run;
+
+/*  Examine Extreme Values */
+proc univariate data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age ;
+	where Intervention = 'Placebo';
+run;
+
+/* Examine Unique Values and Frequency */
+proc freq data= work.RCT;
+	tables  Gender Intervention;
+	where Intervention = 'Placebo';
+run;
+
+/* Intervention = Drug A */
+
+/* Calculate Summary Statistics */
+proc means data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age  SBP DBP;
+	where Intervention = 'Drug A';
+run;
+
+/*  Examine Extreme Values */
+proc univariate data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age ;
+	where Intervention = 'Drug A';
+run;
+
+/* Examine Unique Values and Frequency */
+proc freq data= work.RCT;
+	tables  Gender Intervention;
+	where Intervention = 'Drug A';
+run;
+
+/* Intervention = Drug B */
+
+/* Calculate Summary Statistics */
+proc means data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age  SBP DBP;
+	where Intervention = 'Drug B';
+run;
+
+/*  Examine Extreme Values */
+proc univariate data= work.RCT;
+	var  FBG BMI Base_DBP Base_SBP Age ;
+	where Intervention = 'Drug B';
+run;
+
+/* Examine Unique Values and Frequency */
+proc freq data= work.RCT;
+	tables  Gender Intervention;
+	where Intervention = 'Drug B';
+run;
+
+/* STEP 9: Summary Report */
+/* Descriptive statistics by treatment */
+title "Summary Statistics by Treatment Group";
+proc means data=work.RCT n mean std min max maxdec=1;
+  class  Intervention;
+  var  Age FBG BMI Base_SBP Base_DBP SBP DBP SBP_diff DBP_diff;
+run;
+
+/* Descriptive statistics by Gender */
+title "Summary Statistics by Gender";
+proc means data=work.RCT n mean std min max maxdec=1;
+  class gender;
+  var Age FBG BMI Base_SBP Base_DBP SBP DBP SBP_diff DBP_diff;
+run;
+
+/* Frequency tables for categorical variables */
+title "Gender Distribution by Treatment";
+proc freq data=work.RCT;
+  tables intervention*gender / nocol nopercent norow;
+run;
+
+/* STEP 10: Summary Statistics Table for Baseline Characteristics */
+
+/* Turn on ODS graphics if needed */
+ods graphics on;
+
+/* 1. Continuous variables: Means, StdDev, and ANOVA p-values */
+ods output Summary=MeansOutput;
+ods output OverallANOVA=AnovaPvals;
+
+proc glm data=work.rct;
+  class Intervention;
+  model Age BMI FBG Base_SBP Base_DBP = Intervention;
+  means Intervention / hovtest=levene;
+run;
+quit;
+
+/* 2. Categorical variable: Gender vs Intervention (Chi-square test) */
+ods output CrossTabFreqs=GenderFreqs;
+ods output ChiSq=GenderChiSq;
+
+proc freq data=work.rct;
+  tables Gender*Intervention / chisq;
+run;
+
+/* 3. Summary Table: Means + SD per Group */
+proc means data=work.rct n mean stddev maxdec=1;
+  class Intervention;
+  var Age BMI FBG Base_SBP Base_DBP;
+run;
+
+/* STEP 11: Visualizations */
+
+/* 1. Boxplot: SBP Reduction by Intervention Group */
+title "Reduction in Systolic BP by Intervention Group";
+proc sgplot data=work.RCT;
+  vbox  SBP_diff / category= Intervention;
+  yaxis label="Systolic BP Reduction";
+run;
+
+/* 2. Boxplot: DBP Reduction by Intervention Group */
+title "Reduction in Diastolic BP by Intervention Group";
+proc sgplot data=work.RCT;
+  vbox  DBP_diff / category= Intervention;
+  yaxis label="Diastolic BP Reduction";
+run;
+
+/* 3. Histogram: Baseline Fasting BG */
+title "Distribution of Fasting Blood Glucose";
+proc sgplot data=work.RCT;
+  histogram "FBG"n;
+  density "FBG"n;
+  xaxis label="Fasting Blood Glucose (mg/dL)";
+run;
+
+/* 4. Bar Chart: Gender Distribution per Treatment Group */
+title "Gender Distribution by Treatment Group";
+proc sgplot data=work.RCT;
+  vbar Intervention / group=Gender groupdisplay=cluster;
+run;
+
+/* 5. Scatter PLot: Relation between BMI and SBP Reduction */
+title "Relationship Between Baseline BMI and SBP Reduction";
+proc sgplot data=work.RCT;
+  scatter x="BMI"n y=SBP_diff / group=Intervention;
+  reg x="BMI"n y=SBP_diff / group=Intervention;
+  xaxis label="BMI";
+  yaxis label="Systolic BP Reduction";
+run;
+ 
+/* 6. Panel of Poxplots */
+/* STEP: Prepare long-format data for panel plots */
+
+/* Create long format dataset for BMI and FBG */
+data PanelData;
+  set work.RCT;
+
+  /* First row: BMI */
+  Parameter = "BMI";
+  Value = BMI;
+  output;
+
+  /* Second row: FBG */
+  Parameter = "FBG";
+  Value = FBG;
+  output;
+run;
+
+/* STEP: Generate the Panel Boxplots */
+title "Baseline BMI and FBG Across Treatment Groups";
+proc sgpanel data=PanelData;
+  panelby Parameter / layout=columnlattice novarname;
+  vbox Value / category=Intervention;
+run;
+
+/* 7. Line Plot */
+
+data SBP_Long;
+  set work.RCT;
+
+  /* Baseline SBP */
+  TimePoint = 1;
+  SBP_Value = Base_SBP;
+  output;
+
+  /* After 3 Months SBP */
+  TimePoint = 2;
+  SBP_Value = SBP;
+  output;
+run;
+
+
+title "Individual Change in Systolic BP (Before vs After)";
+proc sgplot data=SBP_Long;
+  series x=TimePoint y=SBP_Value / group=Patient_Code lineattrs=(thickness=1);
+  xaxis values=(1 2) valuesdisplay=("Baseline" "After 3 Months");
+  yaxis label="Systolic BP (mmHg)";
+run;
+
+/* STEP 12: Statistical Tests (P-Value) */
+/* 1. ANOVA – Compare change in BP across treatment groups */
+
+title "ANOVA: Systolic BP Change by Treatment";
+proc anova data=work.rct;
+  class  Intervention;
+  model  SBP_diff =  Intervention;
+  means  Intervention / tukey;
+run;
+
+title "ANOVA: Diastolic BP Change by Treatment";
+proc anova data=work.rct;
+  class  Intervention;
+  model  DBP_diff =  Intervention;
+  means  Intervention / tukey;
+run;
+
+/* 2. T-Tests - Examine Treatment Effect Pairwise between groups */
+/* Compare Drug A vs Placebo */
+proc ttest data=work.RCT;
+    class Intervention;
+    var SBP_diff DBP_diff;
+    where Intervention in ('Placebo','Drug A');
+run;
+
+/* Compare Drug B vs Placebo */
+proc ttest data=work.RCT;
+    class Intervention;
+    var SBP_diff DBP_diff;
+    where Intervention in ('Placebo','Drug B');
+run;
+
+/* Compare Drug A vs Drug B */
+proc ttest data=work.RCT;
+    class Intervention;
+    var SBP_diff DBP_diff;
+    where Intervention in ('Drug A','Drug B');
+run;
+
+/* 3. T-tests – Compare genders (can do both parametric and non-parametric) */
+title "T-Test: Systolic BP Change by Gender";
+proc ttest data=work.rct;
+  class gender;
+  var sbp_diff;
+run;
+
+title "T-Test: Systolic BP Change by Gender";
+proc ttest data=work.rct;
+  class gender;
+  var dbp_diff;
+run;
+
+/* 4. Chi-Square Test – Gender vs Treatment (categorical association) */
+title "Chi-Square Test: Gender and Treatment Group";
+proc freq data=work.rct;
+  tables intervention*gender / chisq expected;
+run;
+
