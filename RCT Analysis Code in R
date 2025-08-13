@@ -1,0 +1,182 @@
+# Load necessary libraries
+library(tidyverse)
+library(stats)
+
+# Define file path
+file_path <- "C:/Users/alreada/Desktop/El futuro/DATASETs/RCT.csv"
+
+# STEP 1 & 2: Import CSV and Display First 10 Rows
+tryCatch({
+  rct_data <- read.csv(file_path)
+  print("--- First 10 Rows ---")
+  print(head(rct_data, 10))
+}, error = function(e) {
+  stop("Error: The file was not found at the specified path. Please check the file_path variable.")
+})
+
+# STEP 3: Describe Structures and Variables
+print("--- Data Structure ---")
+str(rct_data)
+
+#  STEP 4: Check for Missing Values 
+print("Missing Values Count per Column: ")
+print(colSums(is.na(rct_data)))
+
+# STEP 5 & 6: Summary Statistics & Extreme Values 
+# The summary() function provides min, max, median, and mean values.
+print("--- Summary Statistics for Key Variables ---")
+numeric_vars <- rct_data %>% select_if(is.numeric)
+print(summary(numeric_vars))
+
+# STEP 7: Examine Unique Values and Frequency 
+print("Frequency for Gender: ")
+print(table(rct_data$Gender))
+print("Frequency for Intervention: ")
+print(table(rct_data$Intervention))
+
+
+# STEP 8: Summary Statistics for Each Intervention Group 
+print("Descriptive Statistics by Intervention Group: ")
+rct_data %>%
+  group_by(Intervention) %>%
+  select_if(is.numeric) %>%
+  summarise(across(everything(), list(mean = mean, sd = sd, min = min, max = max), na.rm = TRUE)) %>%
+  print()
+
+# STEP 9: Summary Report by Treatment and Gender
+print("Summary Report by Treatment Group: ")
+rct_data %>%
+  group_by(Intervention) %>%
+  select(Age, FBG, BMI, Base_SBP, Base_DBP, SBP, DBP) %>%
+  summarise(across(everything(), list(
+    n = ~sum(!is.na(.)),
+    mean = ~mean(.x, na.rm = TRUE),
+    sd = ~sd(.x, na.rm = TRUE),
+    min = ~min(.x, na.rm = TRUE),
+    max = ~max(.x, na.rm = TRUE)
+  ))) %>%
+  print()
+
+print("Summary Report by Gender: ")
+rct_data %>%
+  group_by(Gender) %>%
+  select(Age, FBG, BMI, Base_SBP, Base_DBP, SBP, DBP) %>%
+  summarise(across(everything(), list(
+    n = ~sum(!is.na(.)),
+    mean = ~mean(.x, na.rm = TRUE),
+    sd = ~sd(.x, na.rm = TRUE),
+    min = ~min(.x, na.rm = TRUE),
+    max = ~max(.x, na.rm = TRUE)
+  ))) %>%
+  print()
+
+print("Gender Distribution by Treatment: ")
+print(table(rct_data$Intervention, rct_data$Gender))
+
+# STEP 10: Baseline Characteristics Table & Tests
+print("ANOVA for Baseline Characteristics by Intervention: ")
+# ANOVA for continuous variables
+aov_age <- aov(Age ~ Intervention, data = rct_data)
+print(summary(aov_age))
+aov_bmi <- aov(BMI ~ Intervention, data = rct_data)
+print(summary(aov_bmi))
+
+print("Chi-Square Test for Gender vs Intervention: ")
+# Chi-square test for categorical variables
+gender_intervention_table <- table(rct_data$Gender, rct_data$Intervention)
+print(chisq.test(gender_intervention_table))
+
+# STEP 11: Visualizations
+if (!"SBP_diff" %in% names(rct_data)) {
+  rct_data <- rct_data %>% mutate(SBP_diff = Base_SBP - SBP)
+}
+if (!"DBP_diff" %in% names(rct_data)) {
+  rct_data <- rct_data %>% mutate(DBP_diff = Base_DBP - DBP)
+}
+
+# 1. Boxplot: SBP Reduction by Intervention Group
+ggplot(rct_data, aes(x = Intervention, y = SBP_diff, fill = Intervention)) +
+  geom_boxplot() +
+  labs(title = "Reduction in Systolic BP by Intervention Group", y = "Systolic BP Reduction") +
+  theme_minimal()
+
+# 2. Boxplot: DBP Reduction by Intervention Group
+ggplot(rct_data, aes(x = Intervention, y = DBP_diff, fill = Intervention)) +
+  geom_boxplot() +
+  labs(title = "Reduction in Diastolic BP by Intervention Group", y = "Diastolic BP Reduction") +
+  theme_minimal()
+
+# 3. Histogram: Baseline Fasting BG
+ggplot(rct_data, aes(x = FBG)) +
+  geom_histogram(aes(y = ..density..), binwidth = 5, fill = "skyblue", color = "black") +
+  geom_density(alpha = .2, fill = "#FF6666") +
+  labs(title = "Distribution of Fasting Blood Glucose", x = "Fasting Blood Glucose (mg/dL)") +
+  theme_minimal()
+
+# 4. Bar Chart: Gender Distribution per Treatment Group
+ggplot(rct_data, aes(x = Intervention, fill = Gender)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Gender Distribution by Treatment Group") +
+  theme_minimal()
+
+# 5. Scatter Plot: BMI vs SBP Reduction
+ggplot(rct_data, aes(x = BMI, y = SBP_diff, color = Intervention)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Relationship Between Baseline BMI and SBP Reduction", x = "BMI", y = "Systolic BP Reduction") +
+  theme_minimal()
+
+# 6. Panel of Boxplots
+rct_data %>%
+  select(Intervention, BMI, FBG) %>%
+  pivot_longer(cols = c(BMI, FBG), names_to = "Parameter", values_to = "Value") %>%
+  ggplot(aes(x = Intervention, y = Value, fill = Intervention)) +
+  geom_boxplot() +
+  facet_wrap(~Parameter, scales = "free_y") +
+  labs(title = "Baseline BMI and FBG Across Treatment Groups") +
+  theme_minimal()
+
+# 7. Line Plot (Spaghetti Plot)
+rct_data %>%
+  select(Patient_Code, Base_SBP, SBP) %>%
+  pivot_longer(cols = c(Base_SBP, SBP), names_to = "TimePoint", values_to = "SBP_Value") %>%
+  mutate(TimePoint = factor(TimePoint, levels = c("Base_SBP", "SBP"), labels = c("Baseline", "After 3 Months"))) %>%
+  ggplot(aes(x = TimePoint, y = SBP_Value, group = Patient_Code)) +
+  geom_line(alpha = 0.5) +
+  labs(title = "Individual Change in Systolic BP (Before vs After)", y = "Systolic BP (mmHg)", x = "Time Point") +
+  theme_minimal()
+
+
+# STEP 12: Statistical Tests (P-Value)
+# 1. ANOVA – Compare change in BP across treatment groups
+print("ANOVA: Systolic BP Change by Treatment with Tukey HSD: ")
+anova_sbp_diff <- aov(SBP_diff ~ Intervention, data = rct_data)
+print(summary(anova_sbp_diff))
+print(TukeyHSD(anova_sbp_diff))
+
+print("ANOVA: Diastolic BP Change by Treatment with Tukey HSD: ")
+anova_dbp_diff <- aov(DBP_diff ~ Intervention, data = rct_data)
+print(summary(anova_dbp_diff))
+print(TukeyHSD(anova_dbp_diff))
+
+# 2. T-Tests - Pairwise comparisons
+print("T-Test: Drug A vs Placebo: ")
+print(t.test(SBP_diff ~ Intervention, data = subset(rct_data, Intervention %in% c('Placebo', 'Drug A'))))
+
+print("T-Test: Drug B vs Placebo ")
+print(t.test(SBP_diff ~ Intervention, data = subset(rct_data, Intervention %in% c('Placebo', 'Drug B'))))
+
+print("T-Test: Drug A vs Drug B ")
+print(t.test(SBP_diff ~ Intervention, data = subset(rct_data, Intervention %in% c('Drug A', 'Drug B'))))
+
+# 3. T-tests – Compare genders
+print("T-Test: SBP Change by Gender ")
+print(t.test(SBP_diff ~ Gender, data = rct_data))
+
+print("T-Test: DBP Change by Gender ")
+print(t.test(DBP_diff ~ Gender, data = rct_data))
+
+# 4. Chi-Square Test – Gender vs Treatment
+print("Chi-Square Test: Gender and Treatment Group")
+print(chisq.test(table(rct_data$Intervention, rct_data$Gender)))
+
