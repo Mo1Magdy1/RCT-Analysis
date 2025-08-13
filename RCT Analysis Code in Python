@@ -1,0 +1,163 @@
+# Load necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import chi2_contingency, ttest_ind
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
+# Define file path
+file_path = "C:/Users/alreada/Desktop/El futuro/DATASETs/RCT.csv"
+
+# STEP 1 & 2: Import CSV and Display First 10 Rows
+try:
+    rct_data = pd.read_csv(file_path)
+    print("--- First 10 Rows ---")
+    print(rct_data.head(10))
+except FileNotFoundError:
+    print("Error: The file was not found at the specified path. Please check the file_path variable.")
+    exit()
+
+# STEP 3: Describe Structures and Variables
+print("--- Data Structure ---")
+rct_data.info()
+
+# STEP 4: Check for Missing Values
+print("Missing Values Count per Column: ")
+print(rct_data.isnull().sum())
+
+# STEP 5 & 6: Summary Statistics & Extreme Values
+# The summary() function provides min, max, median, and mean values.
+print("--- Summary Statistics for Key Variables ---")
+numeric_vars = rct_data.select_dtypes(include=np.number)
+print(numeric_vars.describe())
+
+# STEP 7: Examine Unique Values and Frequency
+print("Frequency for Gender: ")
+print(rct_data['Gender'].value_counts())
+print("Frequency for Intervention: ")
+print(rct_data['Intervention'].value_counts())
+
+# STEP 8: Summary by Intervention 
+rct_data.groupby('Intervention')[['FBG','BMI','Base_DBP','Base_SBP','Age','SBP','DBP']].agg(['mean','std'])
+
+# STEP 9: Summary by Gender 
+rct_data.groupby('Gender')[['Age','FBG','BMI','Base_SBP','Base_DBP','SBP','DBP','SBP_diff','DBP_diff']].agg(['mean','std'])
+
+# STEP 10: Baseline Characteristics Table & Tests
+print("ANOVA for Baseline Characteristics by Intervention: ")
+# ANOVA for continuous variables
+model_age = ols('Age ~ C(Intervention)', data=rct_data).fit()
+print(sm.stats.anova_lm(model_age, typ=2))
+model_bmi = ols('BMI ~ C(Intervention)', data=rct_data).fit()
+print(sm.stats.anova_lm(model_bmi, typ=2))
+
+print("Chi-Square Test for Gender vs Intervention: ")
+# Chi-square test for categorical variables
+gender_intervention_table = pd.crosstab(rct_data['Gender'], rct_data['Intervention'])
+chi2, p, dof, expected = chi2_contingency(gender_intervention_table)
+print(f"Chi-square: {chi2:.4f}, p-value: {p:.4f}")
+
+# STEP 11: Visualizations
+if 'SBP_diff' not in rct_data.columns:
+    rct_data['SBP_diff'] = rct_data['Base_SBP'] - rct_data['SBP']
+if 'DBP_diff' not in rct_data.columns:
+    rct_data['DBP_diff'] = rct_data['Base_DBP'] - rct_data['DBP']
+
+# 1. Boxplot: SBP Reduction by Intervention Group
+plt.figure()
+sns.boxplot(x='Intervention', y='SBP_diff', data=rct_data)
+plt.title('Reduction in Systolic BP by Intervention Group')
+plt.ylabel('Systolic BP Reduction')
+plt.show()
+
+# 2. Boxplot: DBP Reduction by Intervention Group
+plt.figure()
+sns.boxplot(x='Intervention', y='DBP_diff', data=rct_data)
+plt.title('Reduction in Diastolic BP by Intervention Group')
+plt.ylabel('Diastolic BP Reduction')
+plt.show()
+
+# 3. Histogram: Baseline Fasting BG
+plt.figure()
+sns.histplot(rct_data['FBG'], kde=True)
+plt.title('Distribution of Fasting Blood Glucose')
+plt.xlabel('Fasting Blood Glucose (mg/dL)')
+plt.show()
+
+# 4. Bar Chart: Gender Distribution per Treatment Group
+plt.figure()
+sns.countplot(x='Intervention', hue='Gender', data=rct_data)
+plt.title('Gender Distribution by Treatment Group')
+plt.show()
+
+# 5. Scatter Plot: BMI vs SBP Reduction
+sns.lmplot(x='BMI', y='SBP_diff', hue='Intervention', data=rct_data)
+plt.title('Relationship Between Baseline BMI and SBP Reduction')
+plt.xlabel('BMI')
+plt.ylabel('Systolic BP Reduction')
+plt.show()
+
+# 6. Panel of Boxplots
+df_melted = pd.melt(rct_data, id_vars=['Intervention'], value_vars=['BMI', 'FBG'], var_name='Parameter', value_name='Value')
+sns.catplot(x='Intervention', y='Value', col='Parameter', data=df_melted, kind='box', sharey=False)
+plt.suptitle('Baseline BMI and FBG Across Treatment Groups', y=1.02)
+plt.show()
+
+# 7. Line Plot (Spaghetti Plot)
+df_long_sbp = pd.melt(rct_data, id_vars=['Patient_Code'], value_vars=['Base_SBP', 'SBP'], var_name='TimePoint', value_name='SBP_Value')
+df_long_sbp['TimePoint'] = df_long_sbp['TimePoint'].map({'Base_SBP': 'Baseline', 'SBP': 'After 3 Months'})
+plt.figure(figsize=(10, 7))
+sns.lineplot(x='TimePoint', y='SBP_Value', hue='Patient_Code', data=df_long_sbp, legend=None, alpha=0.3)
+plt.title('Individual Change in Systolic BP (Before vs After)')
+plt.ylabel('Systolic BP (mmHg)')
+plt.xlabel('Time Point')
+plt.show()
+
+# STEP 12: Statistical Tests (P-Value)
+# 1. ANOVA – Compare change in BP across treatment groups
+print("ANOVA: Systolic BP Change by Treatment with Tukey HSD: ")
+model_sbp_diff = ols('SBP_diff ~ C(Intervention)', data=rct_data).fit()
+anova_sbp_table = sm.stats.anova_lm(model_sbp_diff, typ=2)
+print(anova_sbp_table)
+tukey_sbp = pairwise_tukeyhsd(endog=rct_data['SBP_diff'], groups=rct_data['Intervention'], alpha=0.05)
+print(tukey_sbp)
+
+print("ANOVA: Diastolic BP Change by Treatment with Tukey HSD: ")
+model_dbp_diff = ols('DBP_diff ~ C(Intervention)', data=rct_data).fit()
+anova_dbp_table = sm.stats.anova_lm(model_dbp_diff, typ=2)
+print(anova_dbp_table)
+tukey_dbp = pairwise_tukeyhsd(endog=rct_data['DBP_diff'], groups=rct_data['Intervention'], alpha=0.05)
+print(tukey_dbp)
+
+# 2. T-Tests - Pairwise comparisons
+print("T-Test: Drug A vs Placebo: ")
+group_placebo = rct_data[rct_data['Intervention'] == 'Placebo']['SBP_diff'].dropna()
+group_drug_a = rct_data[rct_data['Intervention'] == 'Drug A']['SBP_diff'].dropna()
+print(ttest_ind(group_drug_a, group_placebo))
+
+print("T-Test: Drug B vs Placebo ")
+group_drug_b = rct_data[rct_data['Intervention'] == 'Drug B']['SBP_diff'].dropna()
+print(ttest_ind(group_drug_b, group_placebo))
+
+print("T-Test: Drug A vs Drug B ")
+print(ttest_ind(group_drug_a, group_drug_b))
+
+# 3. T-tests – Compare genders
+print("T-Test: SBP Change by Gender ")
+male_sbp = rct_data[rct_data['Gender'] == 'Male']['SBP_diff'].dropna()
+female_sbp = rct_data[rct_data['Gender'] == 'Female']['SBP_diff'].dropna()
+print(ttest_ind(male_sbp, female_sbp))
+
+print("T-Test: DBP Change by Gender ")
+male_dbp = rct_data[rct_data['Gender'] == 'Male']['DBP_diff'].dropna()
+female_dbp = rct_data[rct_data['Gender'] == 'Female']['DBP_diff'].dropna()
+print(ttest_ind(male_dbp, female_dbp))
+
+# 4. Chi-Square Test – Gender vs Treatment
+print("Chi-Square Test: Gender and Treatment Group")
+chi2, p, dof, expected = chi2_contingency(gender_intervention_table)
+print(f"Chi-square: {chi2:.4f}, p-value: {p:.4f}")
+
