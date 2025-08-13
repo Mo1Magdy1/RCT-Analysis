@@ -1,7 +1,7 @@
 # 🧪 Randomized Controlled Trial (RCT) Analysis
 
 ## 🚀 Project Overview
-This project analyzes a **randomized controlled trial** dataset to investigate the effects of three interventions:
+This project analyzes a **randomized controlled trial** dataset to investigate the **anti-hypertensive** effects of three interventions:
 
 - **Placebo**  
 - **Drug A**  
